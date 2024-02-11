@@ -8,7 +8,7 @@ import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -31,7 +31,7 @@ public class FindingSemicolonBenchmark {
         public ByteBuffer byteBuffer;
         public List<Integer> semicolonPositions;
 
-        @Param({"measurements-100K.txt", "measurements-100M.txt"})
+        @Param({"measurements-100K.txt"})
         String filename;
 
         @Setup(Level.Trial)
@@ -44,7 +44,7 @@ public class FindingSemicolonBenchmark {
 
         private byte[] readFile() {
             try {
-                return Files.readAllBytes(Paths.get(filename));
+                return Files.readAllBytes(Path.of("src/main/resources/", filename));
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
@@ -74,6 +74,15 @@ public class FindingSemicolonBenchmark {
         }
     }
 
+    private static final long SEMICOLON_PATTERN = 0x3B3B3B3B3B3B3B3BL;
+
+    private static int findFirstByteLamport(long word) {
+        long input = word ^ SEMICOLON_PATTERN;
+        long mask = (input & 0x7F7F7F7F7F7F7F7FL) + 0x7F7F7F7F7F7F7F7FL;
+        mask = ~(mask | input | 0x7F7F7F7F7F7F7F7FL);
+        return Long.numberOfTrailingZeros(mask) >>> 3;
+    }
+
     @Benchmark
     public void swarLamport(Measurements measurements) {
         int numOfSemicolons = 0;
@@ -96,6 +105,12 @@ public class FindingSemicolonBenchmark {
         if (numOfSemicolons != measurements.semicolonPositions.size()) {
             throw new AssertionError();
         }
+    }
+
+    private static int findFirstByteMycroft(long word) {
+        final long match = word ^ SEMICOLON_PATTERN;
+        long mask = (match - 0x0101010101010101L) & ~match & 0x8080808080808080L;
+        return Long.numberOfTrailingZeros(mask) >>> 3;
     }
 
     @Benchmark
@@ -122,8 +137,10 @@ public class FindingSemicolonBenchmark {
         }
     }
 
+    private static final VectorSpecies<Byte> BYTE_SPECIES = ByteVector.SPECIES_PREFERRED;
+
     @Benchmark
-    public void findSemicolonsVectorAPI(Measurements measurements) {
+    public void vectorAPI(Measurements measurements) {
         int numOfSemicolons = 0;
         Vector<Byte> semicolonVector = BYTE_SPECIES.broadcast(';');
         int vectorLoopBound = BYTE_SPECIES.loopBound(measurements.bytes.length);
@@ -143,22 +160,6 @@ public class FindingSemicolonBenchmark {
         if (numOfSemicolons != measurements.semicolonPositions.size()) {
             throw new AssertionError();
         }
-    }
-
-    private static final VectorSpecies<Byte> BYTE_SPECIES = ByteVector.SPECIES_PREFERRED;
-    private static final long SEMICOLON_PATTERN = 0x3B3B3B3B3B3B3B3BL;
-
-    private static int findFirstByteLamport(long word) {
-        long input = word ^ SEMICOLON_PATTERN;
-        long mask = (input & 0x7F7F7F7F7F7F7F7FL) + 0x7F7F7F7F7F7F7F7FL;
-        mask = ~(mask | input | 0x7F7F7F7F7F7F7F7FL);
-        return Long.numberOfTrailingZeros(mask) >>> 3;
-    }
-
-    private static int findFirstByteMycroft(long word) {
-        final long match = word ^ SEMICOLON_PATTERN;
-        long mask = (match - 0x0101010101010101L) & ~match & 0x8080808080808080L;
-        return Long.numberOfTrailingZeros(mask) >>> 3;
     }
 
 }
