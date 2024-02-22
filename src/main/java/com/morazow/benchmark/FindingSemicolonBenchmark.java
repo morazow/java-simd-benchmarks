@@ -17,10 +17,10 @@ import java.util.concurrent.TimeUnit;
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 @Warmup(iterations = 5, time = 10)
 @Measurement(iterations = 10, time = 1)
-@Fork(value = 1, jvmArgsAppend = {
-        "-XX:+UnlockDiagnosticVMOptions",
-        "-XX:+UnlockExperimentalVMOptions",
-        "--add-modules", "jdk.incubator.vector"
+@Fork(value = 1, jvmArgsAppend = { //
+        "-XX:+UnlockDiagnosticVMOptions", //
+        "-XX:+UnlockExperimentalVMOptions", //
+        "--add-modules", "jdk.incubator.vector" //
 })
 @Threads(1)
 public class FindingSemicolonBenchmark {
@@ -28,7 +28,6 @@ public class FindingSemicolonBenchmark {
     @State(Scope.Benchmark)
     public static class Measurements {
         public byte[] bytes;
-        public ByteBuffer byteBuffer;
         public List<Integer> semicolonPositions;
 
         @Param({"measurements-100K.txt"})
@@ -37,14 +36,12 @@ public class FindingSemicolonBenchmark {
         @Setup(Level.Trial)
         public void setup() {
             bytes = readFile();
-            // Little Endian byte buffer is required because of Long.numberOfTrailingZeros calculation.
-            byteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
             semicolonPositions = findSemicolonPositions(bytes);
         }
 
         private byte[] readFile() {
             try {
-                return Files.readAllBytes(Path.of("src/main/resources/", filename));
+                return Files.readAllBytes(Path.of("src/main/resources/1BRC/", filename));
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
@@ -86,9 +83,10 @@ public class FindingSemicolonBenchmark {
     @Benchmark
     public void swarLamport(Measurements measurements) {
         int numOfSemicolons = 0;
+        final ByteBuffer byteBuffer = ByteBuffer.wrap(measurements.bytes).order(ByteOrder.LITTLE_ENDIAN);
         int i = 0;
         while (i + Long.BYTES <= measurements.bytes.length) {
-            long word = measurements.byteBuffer.getLong(i);
+            long word = byteBuffer.getLong(i);
             int index = findFirstByteLamport(word);
             if (index < Long.BYTES) {
                 i += index + 1;
@@ -116,9 +114,10 @@ public class FindingSemicolonBenchmark {
     @Benchmark
     public void swarMycroft(Measurements measurements) {
         int numOfSemicolons = 0;
+        final ByteBuffer byteBuffer = ByteBuffer.wrap(measurements.bytes).order(ByteOrder.LITTLE_ENDIAN);
         int i = 0;
         while (i + Long.BYTES <= measurements.bytes.length) {
-            long word = measurements.byteBuffer.getLong(i);
+            long word = byteBuffer.getLong(i);
             int index = findFirstByteMycroft(word);
             if (index < Long.BYTES) {
                 i += index + 1;
